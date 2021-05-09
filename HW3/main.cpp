@@ -18,10 +18,15 @@
 #include "stm32l475e_iot01_accelero.h"
 
 #define PI 3.1415
-    
-const char* host = "192.168.177.124";
+ 
+
+
+const char* host = "192.168.31.124";
 int flag_1 = 0;
 int flag_2 = 0;
+
+Thread gui_thread(osPriorityNormal);
+Thread angle_thread(osPriorityHigh);
 
 
 volatile int message_num = 0;
@@ -46,14 +51,12 @@ struct Config config = {64, {20, 10, 5},  {
 
 float threshold_angle = 0;
 
-DigitalIn btn2(USER_BUTTON);
+InterruptIn btn2(USER_BUTTON);
 BufferedSerial pc(USBTX, USBRX);
 uLCD_4DGL uLCD(D1, D0, D2);
 
 
 
-Thread gui_thread(osPriorityNormal);
-Thread angle_thread(osPriorityLow);
 
 
 
@@ -66,18 +69,22 @@ int model_deploy();
 int PredictGesture(float* output);
 int Angle_detect(float threshold_angle);
 void menu(int curr_op);
-void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client);
+void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client, float angle);
 
 void messageArrived(MQTT::MessageData& md);
 
 void model_run(Arguments *in, Reply *out);
 void rpcANGLE(Arguments *in, Reply *out);
-void rpcClose(Arguments *in, Reply *out);
+void rpcClose1(Arguments *in, Reply *out);
+void rpcClose2(Arguments *in, Reply *out);
+
 
 
 RPCFunction modelrun(&model_run, "model_run");
 RPCFunction Angle(&rpcANGLE, "angle_detect");
-RPCFunction Close(&rpcClose, "close");
+RPCFunction Close1(&rpcClose1, "close1");
+RPCFunction Close2(&rpcClose2, "close2");
+
 
 WiFiInterface *wifi = WiFiInterface::get_default_instance();
 
@@ -327,7 +334,7 @@ int model_deploy(){
   // incur some penalty in code space for op implementations that are not
 
   // needed by this graph.
-  if(!flag_1){
+  
   static tflite::MicroOpResolver<6> micro_op_resolver;
 
   micro_op_resolver.AddBuiltin(
@@ -407,7 +414,7 @@ int model_deploy(){
   error_reporter->Report("Set up successful...\n");
 
 
-  while (!flag_1) {
+  while (true) {
 
 
     // Attempt to read new data from the accelerometer
@@ -461,27 +468,27 @@ int model_deploy(){
       menu(gesture_index);
 
     }
-    if(!btn2){
-        printf("fuck\r\n");
+    /*if(btn2){
+        publish_message(&client, (gesture_index + 2)*15 );
         break;
-    }
+    }*/
 
   
   }
-  }
+  
      
     
 }
 
 void model_run(Arguments *in, Reply *out){
-    
     gui_queue.call(&model_deploy);
     gui_thread.start(callback(&gui_queue, &EventQueue::dispatch_forever));
+    
 }
 
 int Angle_detect(float threshold_angle){
     
-    while(1){
+    
     BSP_ACCELERO_Init();
     
     int16_t pDataXYZ[3] = {0};
@@ -496,8 +503,6 @@ int Angle_detect(float threshold_angle){
     for(int i=0;i<3; i++){
         ref_g = ref_g + double(ref[i]*ref[i]);
     }
-    
-    printf("%lf\r\n", ref_g);
     int j = 0;
     while(j<10){
         ThisThread::sleep_for(5000ms);
@@ -515,17 +520,24 @@ int Angle_detect(float threshold_angle){
         temp = temp/sqrt(ref_g*length);
         temp = (1-temp*temp)/(temp);
         angle  = atan(temp)*180/PI;
-        if(angle>threshold_angle){
-            //publish_message(&client, angle);
+        printf("%f\r\n", (angle));
+        uLCD.locate(1, 2);
+        uLCD.text_width(4);
+        uLCD.text_height(4);
+        uLCD.cls();
+        uLCD.printf("%f\r\n", (angle));
+        if((angle)>threshold_angle){
+            publish_message(&client, angle);
             j++;
         }
     }
-  }
+  
 }
 
 void rpcANGLE(Arguments *in, Reply *out){
     angle_queue.call(&Angle_detect, threshold_angle);
     angle_thread.start(callback(&angle_queue, &EventQueue::dispatch_forever));
+    
     
 }
 
@@ -535,7 +547,10 @@ void menu(int curr_op){
     uLCD.cls();
     const char *options[3] = { "15", "30", 
                              "45" };
-    for(int j = 0; j<3; j++){
+
+    uLCD.text_width(4);
+    uLCD.text_height(4);
+    /*for(int j = 0; j<3; j++){
         if(curr_op == j){
             uLCD.color(RED);
             uLCD.printf(options[j]);
@@ -546,7 +561,10 @@ void menu(int curr_op){
             uLCD.printf(options[j]);
             uLCD.printf("\n");
         }
-    }
+    }*/
+    uLCD.locate(1, 2);
+
+    uLCD.printf(options[curr_op]);
 }
 
 
@@ -572,15 +590,14 @@ void messageArrived(MQTT::MessageData& md) {
 
 }
 
-void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
+void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client, float angle) {
 
-    message_num++;
 
     MQTT::Message message;
 
     char buff[100];
 
-    sprintf(buff, "QoS0 Hello, Python! #%d", message_num);
+    sprintf(buff, "QoS0 Hello, Python! %f", angle);
 
     message.qos = MQTT::QOS0;
 
@@ -608,7 +625,11 @@ void close_mqtt() {
 
 }
 
-void rpcClose(Arguments *in, Reply *out){
-    flag_2=1;
-    flag_1=1;
+void rpcClose1(Arguments *in, Reply *out){
+  gui_thread.terminate();
+}
+
+
+void rpcClose2(Arguments *in, Reply *out){
+  angle_thread.terminate();
 }
