@@ -17,7 +17,7 @@ mqttc = paho.Client()
 
 # TODO: revise host to your IP
 
-host = "192.168.129.124"
+host = "192.168.143.124"
 
 topic = "Mbed"
 
