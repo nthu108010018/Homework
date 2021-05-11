@@ -21,7 +21,7 @@
  
 
 
-const char* host = "192.168.129.124";
+const char* host = "192.168.143.124";
 int flag_1 = 1;
 int flag_2 = 0;
 
@@ -79,6 +79,11 @@ void rpcClose1(Arguments *in, Reply *out);
 void rpcClose2(Arguments *in, Reply *out);
 
 
+DigitalOut led1(LED1);
+DigitalOut led2(LED2);
+DigitalOut led3(LED3);
+
+
 
 RPCFunction modelrun(&model_run, "model_run");
 RPCFunction Angle(&rpcANGLE, "angle_detect");
@@ -96,8 +101,10 @@ MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
 
 
 int main(int argc, char* argv[]) {
+   led1 = 0;
+   led2 = 0;
+   led3 = 0;
 
-  
    
 
     if (!wifi) {
@@ -486,10 +493,15 @@ void model_run(Arguments *in, Reply *out){
 
 int Angle_detect(float threshold_angle){
     while(flag_2 == 1){
-
+    
     printf("Ange_detection_mode start\r\n");
     BSP_ACCELERO_Init();
     int16_t pDataXYZ[3] = {0};
+    led1 = 0;
+    ThisThread::sleep_for(100ms);
+    led1 = 1;
+    ThisThread::sleep_for(100ms);
+    led1 = 0;
     BSP_ACCELERO_AccGetXYZ(pDataXYZ);
 
     int ref[3];
@@ -502,10 +514,15 @@ int Angle_detect(float threshold_angle){
         ref_g = ref_g + double(ref[i]*ref[i]);
     }
     int j = 0;
-    while(j<10){
-        ThisThread::sleep_for(5000ms);
+    while(j<5){
+        ThisThread::sleep_for(1000ms);
+        led3 = 0;
+        ThisThread::sleep_for(100ms);
+        led3 = 1;
+        ThisThread::sleep_for(100ms);
+        led3 = 0;
         BSP_ACCELERO_AccGetXYZ(pDataXYZ);
-        printf("%d %d %d\r\n", pDataXYZ[0], pDataXYZ[1], pDataXYZ[2]);
+        //printf("%d %d %d\r\n", pDataXYZ[0], pDataXYZ[1], pDataXYZ[2]);
         float angle = 0;
         double temp = 0;
         double length = 0;
@@ -520,8 +537,8 @@ int Angle_detect(float threshold_angle){
         angle  = atan(temp)*180/PI;
         printf("%f\r\n", (angle));
         uLCD.locate(1, 2);
-        uLCD.text_width(4);
-        uLCD.text_height(4);
+        uLCD.text_width(3);
+        uLCD.text_height(3);
         uLCD.cls();
         uLCD.printf("%f\r\n", (angle));
         if((angle)>threshold_angle){
