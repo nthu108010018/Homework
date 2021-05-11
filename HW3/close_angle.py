@@ -17,12 +17,11 @@ mqttc = paho.Client()
 
 # TODO: revise host to your IP
 
-host = "192.168.129.124"
+host = "192.168.143.124"
 
 topic = "Mbed"
 angle = []
-
-
+num = 0
 serdev = '/dev/ttyACM0'
 s = serial.Serial(serdev, 9600)
 
@@ -34,9 +33,18 @@ def on_connect(self, mosq, obj, rc):
 
 
 def on_message(mosq, obj, msg):
+    global num
     print("[Received] Topic: " + msg.topic + ", Message: " + str(msg.payload) + "\n")
+    num = num+1
     angle.append(str(msg.payload))
-
+    if num == 5 :
+        print(angle)
+        s.write(bytes("/close2/run\r", 'UTF-8'))
+    
+    
+    
+        
+    
 
 def on_subscribe(mosq, obj, mid, granted_qos):
 
@@ -69,14 +77,8 @@ mqttc.subscribe(topic, 0)
 
 
 # Publish messages from Python
-num = 0
 
-if mqttc.on_message :
-   num = num +1
-
-if num == 10 :
-   print(angle)
-   s.write(bytes("/close2/run\r", 'UTF-8'))
+  
     
 
 
