@@ -21,8 +21,8 @@
  
 
 
-const char* host = "192.168.31.124";
-int flag_1 = 0;
+const char* host = "192.168.129.124";
+int flag_1 = 1;
 int flag_2 = 0;
 
 Thread gui_thread(osPriorityNormal);
@@ -51,7 +51,7 @@ struct Config config = {64, {20, 10, 5},  {
 
 float threshold_angle = 0;
 
-InterruptIn btn2(USER_BUTTON);
+DigitalIn btn2(USER_BUTTON);
 BufferedSerial pc(USBTX, USBRX);
 uLCD_4DGL uLCD(D1, D0, D2);
 
@@ -283,8 +283,7 @@ int PredictGesture(float* output) {
 
 int model_deploy(){
     
-    
-
+  
   // Whether we should clear the buffer next time we fetch data
   
   bool should_clear_buffer = false;
@@ -461,36 +460,35 @@ int model_deploy(){
 
 
     // Produce an output
-
-    if (gesture_index < label_num) {;
+    if (gesture_index < label_num) {
 
       error_reporter->Report(config.output_message[gesture_index]);
       menu(gesture_index);
+      threshold_angle = (gesture_index + 1)*15;
+      
+    }
+    if(!btn2){
+        publish_message(&client, threshold_angle);
 
     }
-    /*if(btn2){
-        publish_message(&client, (gesture_index + 2)*15 );
-        break;
-    }*/
-
-  
-  }
-  
-     
     
+  }    
 }
 
 void model_run(Arguments *in, Reply *out){
+  
     gui_queue.call(&model_deploy);
     gui_thread.start(callback(&gui_queue, &EventQueue::dispatch_forever));
+  
+    
     
 }
 
 int Angle_detect(float threshold_angle){
-    
-    
+    while(flag_2 == 1){
+
+    printf("Ange_detection_mode start\r\n");
     BSP_ACCELERO_Init();
-    
     int16_t pDataXYZ[3] = {0};
     BSP_ACCELERO_AccGetXYZ(pDataXYZ);
 
@@ -518,7 +516,7 @@ int Angle_detect(float threshold_angle){
             length = length + pDataXYZ[i]*pDataXYZ[i];
         }
         temp = temp/sqrt(ref_g*length);
-        temp = (1-temp*temp)/(temp);
+        temp = sqrt(1-temp*temp)/(temp);
         angle  = atan(temp)*180/PI;
         printf("%f\r\n", (angle));
         uLCD.locate(1, 2);
@@ -531,10 +529,12 @@ int Angle_detect(float threshold_angle){
             j++;
         }
     }
+    }
   
 }
 
 void rpcANGLE(Arguments *in, Reply *out){
+    flag_2 = 1;
     angle_queue.call(&Angle_detect, threshold_angle);
     angle_thread.start(callback(&angle_queue, &EventQueue::dispatch_forever));
     
@@ -597,7 +597,7 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client, float angle) 
 
     char buff[100];
 
-    sprintf(buff, "QoS0 Hello, Python! %f", angle);
+    sprintf(buff, "%f", angle);
 
     message.qos = MQTT::QOS0;
 
@@ -627,9 +627,11 @@ void close_mqtt() {
 
 void rpcClose1(Arguments *in, Reply *out){
   gui_thread.terminate();
+  flag_1 = 0;
 }
 
 
 void rpcClose2(Arguments *in, Reply *out){
+  flag_2 = 0;
   angle_thread.terminate();
 }
